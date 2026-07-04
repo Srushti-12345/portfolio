@@ -24,6 +24,113 @@ function getDatabaseName(uri: string): string {
   return "axinex";
 }
 
+// Lazily initialized Nodemailer Transporter
+let mailTransporter: any = null;
+
+function getMailTransporter() {
+  if (!mailTransporter) {
+    const host = process.env.SMTP_HOST;
+    const port = parseInt(process.env.SMTP_PORT || "587");
+    const user = process.env.SMTP_USER;
+    const pass = process.env.SMTP_PASS;
+
+    if (!user || !pass) {
+      console.warn("WARNING: SMTP_USER or SMTP_PASS environment variables are not set. Email notifications for contact form submissions will be skipped.");
+      return null;
+    }
+
+    try {
+      mailTransporter = nodemailer.createTransport({
+        host,
+        port,
+        secure: port === 465, // true for port 465, false for other ports
+        auth: {
+          user,
+          pass,
+        },
+      });
+      console.log("Nodemailer SMTP Transporter initialized successfully.");
+    } catch (err) {
+      console.error("Failed to initialize Nodemailer transporter:", err);
+      mailTransporter = null;
+    }
+  }
+  return mailTransporter;
+}
+
+async function sendEmailNotification(name: string, email: string, subject: string, message: string, timestamp: Date) {
+  const transporter = getMailTransporter();
+  if (!transporter) {
+    console.log("Skipping email notification because SMTP is not configured in .env.");
+    return false;
+  }
+
+  const notificationEmail = process.env.NOTIFICATION_EMAIL || process.env.SMTP_USER;
+  if (!notificationEmail) {
+    console.warn("WARNING: NOTIFICATION_EMAIL is not set, and unable to fallback to SMTP_USER.");
+    return false;
+  }
+
+  const mailOptions = {
+    from: `"Portfolio Enquiry" <${process.env.SMTP_USER}>`,
+    to: notificationEmail,
+    replyTo: email,
+    subject: `New Portfolio Enquiry: ${subject || "No Subject"}`,
+    text: `You have received a new message from your portfolio contact form:
+    
+Name: ${name}
+Email: ${email}
+Subject: ${subject || "No Subject"}
+Received At: ${timestamp.toLocaleString()}
+
+Message:
+------------------------------------------
+${message}
+------------------------------------------
+
+Reply directly to this email to contact the sender.`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
+        <h2 style="color: #4f46e5; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; margin-top: 0;">New Portfolio Enquiry</h2>
+        <table style="width: 100%; margin-top: 15px; border-collapse: collapse;">
+          <tr>
+            <td style="padding: 8px 0; font-weight: bold; color: #4a5568; width: 100px;">Name:</td>
+            <td style="padding: 8px 0; color: #2d3748;">${name}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0; font-weight: bold; color: #4a5568;">Email:</td>
+            <td style="padding: 8px 0; color: #2d3748;"><a href="mailto:${email}">${email}</a></td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0; font-weight: bold; color: #4a5568;">Subject:</td>
+            <td style="padding: 8px 0; color: #2d3748;">${subject || "No Subject"}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0; font-weight: bold; color: #4a5568;">Received At:</td>
+            <td style="padding: 8px 0; color: #2d3748;">${timestamp.toLocaleString()}</td>
+          </tr>
+        </table>
+        <div style="margin-top: 20px; padding: 15px; background-color: #f7fafc; border-left: 4px solid #4f46e5; border-radius: 4px;">
+          <p style="margin: 0; font-weight: bold; color: #4a5568;">Message:</p>
+          <p style="margin: 10px 0 0 0; color: #2d3748; white-space: pre-wrap; font-style: italic;">"${message}"</p>
+        </div>
+        <p style="margin-top: 25px; font-size: 11px; color: #718096; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 15px;">
+          This message was sent automatically from your portfolio contact form.
+        </p>
+      </div>
+    `,
+  };
+
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    console.log("Email notification sent successfully:", info.messageId);
+    return true;
+  } catch (err) {
+    console.error("Failed to send email notification:", err);
+    return false;
+  }
+}
+
 // Lazily initialized MongoDB Client
 let mongoClient: MongoClient | null = null;
 
@@ -304,6 +411,13 @@ app.post("/api/contact", async (req, res) => {
   } catch (dbErr) {
     console.error("Failed to save contact submission to MongoDB database:", dbErr);
     // Continue and return success to the user so user experience isn't broken
+  }
+
+  // Trigger real-time email notification
+  try {
+    await sendEmailNotification(name, email, subject, message, timestamp);
+  } catch (emailErr) {
+    console.error("Failed to trigger email notification:", emailErr);
   }
 
   res.json({ success: true, message: "Thank you for reaching out! Srushti will get back to you shortly." });
