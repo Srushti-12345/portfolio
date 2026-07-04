@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { MessageSquare, X, Send, Sparkles, Terminal, ArrowUpRight, HelpCircle } from "lucide-react";
-import { portfolioData } from "../data/portfolioData";
+import { MessageSquare, X, Send, Sparkles, ArrowUpRight } from "lucide-react";
+import { apiUrl } from "../lib/api";
 
 interface Message {
   id: string;
@@ -75,7 +75,7 @@ export default function AIAssistant({ onDownloadResume }: AIAssistantProps) {
     }
 
     try {
-      const response = await fetch("/api/assistant", {
+      const response = await fetch(apiUrl("/api/assistant"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -161,16 +161,8 @@ export default function AIAssistant({ onDownloadResume }: AIAssistantProps) {
                   </div>
                 </div>
                 <div>
-                  <h4 className="font-sans text-xs font-extrabold text-white">Srushti's Copilot</h4>
-                  <p className="font-mono text-[8px] text-cyan-400 font-bold uppercase tracking-widest flex items-center gap-1">
-                    <span className="w-1 h-1 bg-cyan-400 rounded-full animate-pulse" />
-                    Powered by Gemini 3.5
-                  </p>
+                  <h4 className="font-sans text-xs font-extrabold text-white">Portfolio Assistant</h4>
                 </div>
-              </div>
-
-              <div className="flex items-center space-x-1.5">
-                <span className="font-mono text-[8px] text-white/40 uppercase">Interactive Sandbox</span>
               </div>
             </div>
 

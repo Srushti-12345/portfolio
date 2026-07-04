@@ -2,6 +2,7 @@ import { useState, ChangeEvent, FormEvent } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Mail, Phone, MapPin, Github, Linkedin, Send, CheckCircle2, AlertCircle, Sparkles } from "lucide-react";
 import { portfolioData } from "../data/portfolioData";
+import { apiUrl } from "../lib/api";
 
 export default function Contact() {
   const [formData, setFormData] = useState({
@@ -41,7 +42,7 @@ export default function Contact() {
 
     setIsSending(true);
     try {
-      const response = await fetch("/api/contact", {
+      const response = await fetch(apiUrl("/api/contact"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json"

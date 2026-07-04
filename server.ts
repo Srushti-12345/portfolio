@@ -1,10 +1,10 @@
 import express from "express";
 import path from "path";
-import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 import { MongoClient } from "mongodb";
 import nodemailer from "nodemailer";
+
 
 // Load environment variables
 dotenv.config();
@@ -180,6 +180,31 @@ function getGeminiClient() {
 const app = express();
 const DEFAULT_PORT = Number(process.env.PORT) || 3000;
 
+app.use((req, res, next) => {
+  const allowedOrigins = (process.env.CORS_ORIGIN || "*")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  const requestOrigin = req.headers.origin;
+  const allowAnyOrigin = allowedOrigins.includes("*");
+
+  if (allowAnyOrigin) {
+    res.header("Access-Control-Allow-Origin", "*");
+  } else if (requestOrigin && allowedOrigins.includes(requestOrigin)) {
+    res.header("Access-Control-Allow-Origin", requestOrigin);
+    res.header("Vary", "Origin");
+  }
+
+  res.header("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type");
+
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+
+  next();
+});
+
 app.use(express.json());
 
 // Structured context for Srushti's Portfolio Assistant
@@ -291,16 +316,20 @@ const assistantContext = {
 function getOfflineAssistantReply(lowercaseMsg: string): string {
   let reply = "I'm Srushti's Portfolio Assistant. I'm currently running in local backup mode. Here is what I can tell you:\n\n";
 
-  if (lowercaseMsg.includes("project") || lowercaseMsg.includes("donorsync") || lowercaseMsg.includes("expense")) {
-    reply += "• **DonorSync**: Full-stack blood donation platform (React, Node, MongoDB).\n• **Axinex Technologies Website**: Production corporate site with secure enquiry modules.\n• **ABVP Portal & Anklet Construction**: Current responsive client portals.";
-  } else if (lowercaseMsg.includes("experience") || lowercaseMsg.includes("internship")) {
-    reply += "• **Axinex Technologies** (Web Developer Intern, May 2026 - Present)\n• **Pugarch Technology** (Web Developer Intern, July 2025 - December 2025)";
-  } else if (lowercaseMsg.includes("skills") || lowercaseMsg.includes("tech")) {
-    reply += "• **Frontend**: React.js, Next.js, TypeScript, Tailwind CSS, Framer Motion\n• **Backend**: Node.js, Express.js, MongoDB, REST APIs";
-  } else if (lowercaseMsg.includes("education") || lowercaseMsg.includes("cgpa")) {
-    reply += "• **Bachelor of Engineering**: CSE at Sipna College (CGPA: 8.72)\n• **SSC**: School Topper (99%)";
+  if (lowercaseMsg.includes("project") || lowercaseMsg.includes("donorsync") || lowercaseMsg.includes("expense") || lowercaseMsg.includes("portfolio") || lowercaseMsg.includes("work")) {
+    reply += "• **DonorSync**: Full-stack blood donation platform using React, Node, Express, MongoDB, JWT, and Tailwind CSS.\n• **Axinex Technologies Website**: Production corporate site with responsive UI, enquiry handling, authentication, and email automation.\n• **ABVP Portal & Anklet Construction**: Responsive client portals with clean frontend architecture.";
+  } else if (lowercaseMsg.includes("experience") || lowercaseMsg.includes("internship") || lowercaseMsg.includes("company") || lowercaseMsg.includes("job")) {
+    reply += "• **Axinex Technologies**: Web Developer Intern from May 2026, working on production-level frontend and backend modules.\n• **Pugarch Technology Pvt. Ltd.**: Web Developer Intern from July 2025 to December 2025, building MERN and responsive web projects.";
+  } else if (lowercaseMsg.includes("skills") || lowercaseMsg.includes("tech") || lowercaseMsg.includes("stack") || lowercaseMsg.includes("technology") || lowercaseMsg.includes("language")) {
+    reply += "• **Frontend**: React.js, Next.js, TypeScript, JavaScript, Tailwind CSS, Framer Motion.\n• **Backend**: Node.js, Express.js, REST APIs, JWT, Nodemailer.\n• **Database & tools**: MongoDB, MySQL, Git, GitHub, Postman, Vercel, Render.";
+  } else if (lowercaseMsg.includes("education") || lowercaseMsg.includes("cgpa") || lowercaseMsg.includes("college") || lowercaseMsg.includes("degree") || lowercaseMsg.includes("school")) {
+    reply += "• **B.E. Computer Science & Engineering**: Sipna College of Engineering and Technology, Amravati. Current CGPA: 8.72.\n• **HSC**: 84.17%.\n• **SSC**: 99%, school topper.";
+  } else if (lowercaseMsg.includes("achievement") || lowercaseMsg.includes("award") || lowercaseMsg.includes("scholarship") || lowercaseMsg.includes("certification")) {
+    reply += "• Leela Poonawalla Foundation Scholarship recipient.\n• SSC school topper with 99%.\n• Master of Ceremonies for major college events.\n• Deloitte Australia Data Analytics Job Simulation and Java certifications.";
+  } else if (lowercaseMsg.includes("contact") || lowercaseMsg.includes("email") || lowercaseMsg.includes("phone") || lowercaseMsg.includes("linkedin") || lowercaseMsg.includes("github")) {
+    reply += "• **Email**: srushtitingane25@gmail.com\n• **Phone**: +91 8766400264\n• **GitHub**: https://github.com/Srushti-12345\n• **LinkedIn**: https://www.linkedin.com/in/srushti-tingane-97387327b";
   } else {
-    reply += "Srushti Sanjay Tingane is a talented Full Stack Web Developer and final year Computer Science student. Ask me specifically about her **projects**, **experience**, **skills**, **achievements**, or **education**!";
+    reply += "Srushti Sanjay Tingane is a Computer Science Engineering student and Full Stack Web Developer with experience in React, Next.js, Node.js, Express, MongoDB, responsive UI, authentication, and production client projects.";
   }
 
   return reply;
@@ -329,27 +358,7 @@ app.post("/api/assistant", async (req, res) => {
   }
 
   const latestMessage = messages[messages.length - 1]?.text || "";
-
-  // Guard: Quick safety scan to verify if it is Srushti-related
   const lowercaseMsg = latestMessage.toLowerCase();
-  const portfolioKeywords = [
-    "srushti", "tingane", "project", "work", "experience", "internship", "college", 
-    "skills", "education", "achievements", "contact", "email", "phone", "resume", "cv",
-    "axinex", "pugarch", "donorsync", "expense", "weather", "event", "react", "mern",
-    "mongodb", "scholarship", "poonawalla", "leela", "mc", "hackgenx", "vidyotan"
-  ];
-  
-  const isRelated = portfolioKeywords.some(keyword => lowercaseMsg.includes(keyword)) || 
-                     lowercaseMsg.includes("who are you") || 
-                     lowercaseMsg.includes("tell me about") ||
-                     lowercaseMsg.includes("hello") || 
-                     lowercaseMsg.includes("hi");
-
-  if (!isRelated) {
-    return res.json({
-      text: "I'm Srushti's Portfolio Assistant. I can answer questions about her projects, experience, education, skills, and achievements."
-    });
-  }
 
   const client = getGeminiClient();
 
@@ -432,6 +441,7 @@ async function startServer() {
   const isProduction = process.env.NODE_ENV === "production" || isBuiltServer;
 
   if (!isProduction) {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: {
         hmr: false,
