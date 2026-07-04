@@ -1,0 +1,93 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  
+  --color-brand-bg: #0B1120;
+  --color-brand-surface: #111827;
+  --color-brand-primary: #8B5CF6;
+  --color-brand-secondary: #06B6D4;
+  --color-brand-highlight: #EC4899;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0B1120;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1F2937;
+  border-radius: 9999px;
+  border: 2px solid #0B1120;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #374151;
+}
+
+/* Custom Selection */
+::selection {
+  background: rgba(139, 92, 246, 0.3);
+  color: #F8FAFC;
+}
+
+/* Base Body Styles */
+body {
+  background-color: #0B1120;
+  color: #F8FAFC;
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+}
+
+/* Glowing text classes */
+.glow-text-primary {
+  text-shadow: 0 0 20px rgba(139, 92, 246, 0.4);
+}
+
+.glow-text-secondary {
+  text-shadow: 0 0 20px rgba(6, 182, 212, 0.4);
+}
+
+/* Premium Glassmorphism classes */
+.glass-panel {
+  background: rgba(17, 24, 39, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.glass-panel-hover {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-panel-hover:hover {
+  background: rgba(17, 24, 39, 0.8);
+  border-color: rgba(139, 92, 246, 0.3);
+  box-shadow: 0 10px 30px -10px rgba(139, 92, 246, 0.15);
+}
+
+/* Grid animations and ambient background radial glow */
+.ambient-glow {
+  background: radial-gradient(circle at 50% 50%, rgba(139, 92, 246, 0.15) 0%, rgba(6, 182, 212, 0.05) 50%, transparent 100%);
+}
+
+.ambient-dot-grid {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Custom typing cursor */
+@keyframes blink {
+  50% { border-color: transparent }
+}
+.typing-cursor {
+  border-right: 2px solid #8B5CF6;
+  animation: blink 0.75s step-end infinite;
+}
