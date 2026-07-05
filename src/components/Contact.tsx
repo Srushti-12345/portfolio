@@ -1,6 +1,6 @@
 import { useState, ChangeEvent, FormEvent } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Mail, Phone, MapPin, Github, Linkedin, Send, CheckCircle2, AlertCircle, Sparkles } from "lucide-react";
+import { Mail, MapPin, Github, Linkedin, Send, CheckCircle2, AlertCircle, Sparkles } from "lucide-react";
 import { portfolioData } from "../data/portfolioData";
 import { apiUrl } from "../lib/api";
 
@@ -14,6 +14,7 @@ export default function Contact() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSending, setIsSending] = useState(false);
   const [sendSuccess, setSendSuccess] = useState(false);
+  const hasPhone = Boolean(portfolioData.personalInfo.phone?.trim());
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
@@ -119,17 +120,21 @@ export default function Contact() {
               </div>
 
               {/* Phone */}
-              <div className="flex items-center space-x-4 p-4 rounded-2xl bg-white/[0.01] border border-white/[0.03]">
-                <div className="p-3 rounded-xl bg-cyan-500/10 border border-cyan-500/15 text-cyan-400">
-                  <Phone size={16} />
+              {hasPhone && (
+                <div className="flex items-center space-x-4 p-4 rounded-2xl bg-white/[0.01] border border-white/[0.03]">
+                  <div className="p-3 rounded-xl bg-cyan-500/10 border border-cyan-500/15 text-cyan-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-phone">
+                      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.08 4.18 2 2 0 0 1 4.06 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L6.6 8.6a16 16 0 0 0 6.8 6.8l.96-.96a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92Z" />
+                    </svg>
+                  </div>
+                  <div className="space-y-0.5">
+                    <span className="font-mono text-[9px] text-[#94A3B8] uppercase tracking-widest block font-bold">Phone</span>
+                    <a href={`tel:${portfolioData.personalInfo.phone}`} className="font-sans text-xs sm:text-sm text-white hover:text-cyan-400 transition-colors">
+                      {portfolioData.personalInfo.phone}
+                    </a>
+                  </div>
                 </div>
-                <div className="space-y-0.5">
-                  <span className="font-mono text-[9px] text-[#94A3B8] uppercase tracking-widest block font-bold">Phone</span>
-                  <a href={`tel:${portfolioData.personalInfo.phone}`} className="font-sans text-xs sm:text-sm text-white hover:text-cyan-400 transition-colors">
-                    {portfolioData.personalInfo.phone}
-                  </a>
-                </div>
-              </div>
+              )}
 
               {/* Location */}
               <div className="flex items-center space-x-4 p-4 rounded-2xl bg-white/[0.01] border border-white/[0.03]">

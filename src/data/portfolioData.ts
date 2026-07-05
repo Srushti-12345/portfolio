@@ -39,7 +39,7 @@ export const portfolioData = {
       "Problem Solver"
     ],
     email: "srushtitingane25@gmail.com",
-    phone: "+91 8766400264",
+    phone: "",
     location: "Amravati, Maharashtra",
     github: "https://github.com/Srushti-12345",
     linkedin: "https://www.linkedin.com/in/srushti-tingane-97387327b",

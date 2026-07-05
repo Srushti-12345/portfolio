@@ -101,7 +101,7 @@ export default function ResumeSection({ onDownloadResume }: ResumeSectionProps) 
                 {/* Meta details list */}
                 <div className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-[8px] text-[#94A3B8]">
                   <span>📧 {portfolioData.personalInfo.email}</span>
-                  <span>📱 {portfolioData.personalInfo.phone}</span>
+                  {portfolioData.personalInfo.phone?.trim() && <span>📱 {portfolioData.personalInfo.phone}</span>}
                   <span>📍 {portfolioData.personalInfo.location}</span>
                 </div>
               </div>

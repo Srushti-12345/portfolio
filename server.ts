@@ -474,7 +474,7 @@ const assistantContext = {
   ],
   contact: {
     email: "srushtitingane25@gmail.com",
-    phone: "+91 8766400264",
+    phone: "",
     location: "Amravati, Maharashtra",
     github: "https://github.com/Srushti-12345",
     linkedin: "https://www.linkedin.com/in/srushti-tingane-97387327b"
@@ -495,7 +495,7 @@ function getOfflineAssistantReply(lowercaseMsg: string): string {
   } else if (lowercaseMsg.includes("achievement") || lowercaseMsg.includes("award") || lowercaseMsg.includes("scholarship") || lowercaseMsg.includes("certification")) {
     reply += "• Leela Poonawalla Foundation Scholarship recipient.\n• SSC school topper with 99%.\n• Master of Ceremonies for major college events.\n• Deloitte Australia Data Analytics Job Simulation and Java certifications.";
   } else if (lowercaseMsg.includes("contact") || lowercaseMsg.includes("email") || lowercaseMsg.includes("phone") || lowercaseMsg.includes("linkedin") || lowercaseMsg.includes("github")) {
-    reply += "• **Email**: srushtitingane25@gmail.com\n• **Phone**: +91 8766400264\n• **GitHub**: https://github.com/Srushti-12345\n• **LinkedIn**: https://www.linkedin.com/in/srushti-tingane-97387327b";
+    reply += "• **Email**: srushtitingane25@gmail.com\n• **GitHub**: https://github.com/Srushti-12345\n• **LinkedIn**: https://www.linkedin.com/in/srushti-tingane-97387327b";
   } else {
     reply += "Srushti Sanjay Tingane is a Computer Science Engineering student and Full Stack Web Developer with experience in React, Next.js, Node.js, Express, MongoDB, responsive UI, authentication, and production client projects.";
   }
