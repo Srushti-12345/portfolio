@@ -116,8 +116,7 @@ async function sendEmailNotification(name: string, email: string, subject: strin
   const mailOptions = {
     from: `"Portfolio Enquiry" <${process.env.SMTP_USER}>`,
     to: notificationEmail,
-    replyTo: email,
-    subject: `[Portfolio Contact] ${subject || "New enquiry"} - ${name}`,
+    subject: `[Portfolio Contact] ${subject || "New enquiry"} - ${name} <${email}>`,
     priority: "high" as const,
     headers: {
       "X-Priority": "1",
@@ -136,7 +135,7 @@ Message:
 ${message}
 ------------------------------------------
 
-Reply directly to this email to contact the sender.`,
+Contact the sender at: ${email}`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
         <h2 style="color: #4f46e5; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; margin-top: 0;">New Portfolio Enquiry</h2>
@@ -162,7 +161,10 @@ Reply directly to this email to contact the sender.`,
           <p style="margin: 0; font-weight: bold; color: #4a5568;">Message:</p>
           <p style="margin: 10px 0 0 0; color: #2d3748; white-space: pre-wrap; font-style: italic;">"${safeMessage}"</p>
         </div>
-        <p style="margin-top: 25px; font-size: 11px; color: #718096; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 15px;">
+        <p style="margin-top: 25px; font-size: 13px; color: #2d3748; border-top: 1px solid #e2e8f0; padding-top: 15px;">
+          Reply to the sender here: <a href="mailto:${safeEmail}" style="color: #4f46e5;">${safeEmail}</a>
+        </p>
+        <p style="margin-top: 10px; font-size: 11px; color: #718096; text-align: center;">
           This message was sent automatically from your portfolio contact form.
         </p>
       </div>
