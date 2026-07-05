@@ -9,6 +9,35 @@ import nodemailer from "nodemailer";
 // Load environment variables
 dotenv.config();
 
+const AI_RESPONSE_TIMEOUT_MS = Number(process.env.AI_RESPONSE_TIMEOUT_MS) || 3500;
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    promise
+      .then((value) => {
+        clearTimeout(timeout);
+        resolve(value);
+      })
+      .catch((error) => {
+        clearTimeout(timeout);
+        reject(error);
+      });
+  });
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 function getDatabaseName(uri: string): string {
   try {
     const cleanUri = uri.replace(/^mongodb(\+srv)?:\/\//, "http://");
@@ -44,6 +73,13 @@ function getMailTransporter() {
         host,
         port,
         secure: port === 465, // true for port 465, false for other ports
+        pool: true,
+        maxConnections: 1,
+        maxMessages: 50,
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 15000,
+        requireTLS: port === 587,
         auth: {
           user,
           pass,
@@ -71,6 +107,12 @@ async function sendEmailNotification(name: string, email: string, subject: strin
     return false;
   }
 
+  const safeName = escapeHtml(name);
+  const safeEmail = escapeHtml(email);
+  const safeSubject = escapeHtml(subject || "No Subject");
+  const safeMessage = escapeHtml(message);
+  const receivedAt = timestamp.toLocaleString();
+
   const mailOptions = {
     from: `"Portfolio Enquiry" <${process.env.SMTP_USER}>`,
     to: notificationEmail,
@@ -81,7 +123,7 @@ async function sendEmailNotification(name: string, email: string, subject: strin
 Name: ${name}
 Email: ${email}
 Subject: ${subject || "No Subject"}
-Received At: ${timestamp.toLocaleString()}
+Received At: ${receivedAt}
 
 Message:
 ------------------------------------------
@@ -95,24 +137,24 @@ Reply directly to this email to contact the sender.`,
         <table style="width: 100%; margin-top: 15px; border-collapse: collapse;">
           <tr>
             <td style="padding: 8px 0; font-weight: bold; color: #4a5568; width: 100px;">Name:</td>
-            <td style="padding: 8px 0; color: #2d3748;">${name}</td>
+            <td style="padding: 8px 0; color: #2d3748;">${safeName}</td>
           </tr>
           <tr>
             <td style="padding: 8px 0; font-weight: bold; color: #4a5568;">Email:</td>
-            <td style="padding: 8px 0; color: #2d3748;"><a href="mailto:${email}">${email}</a></td>
+            <td style="padding: 8px 0; color: #2d3748;"><a href="mailto:${safeEmail}">${safeEmail}</a></td>
           </tr>
           <tr>
             <td style="padding: 8px 0; font-weight: bold; color: #4a5568;">Subject:</td>
-            <td style="padding: 8px 0; color: #2d3748;">${subject || "No Subject"}</td>
+            <td style="padding: 8px 0; color: #2d3748;">${safeSubject}</td>
           </tr>
           <tr>
             <td style="padding: 8px 0; font-weight: bold; color: #4a5568;">Received At:</td>
-            <td style="padding: 8px 0; color: #2d3748;">${timestamp.toLocaleString()}</td>
+            <td style="padding: 8px 0; color: #2d3748;">${receivedAt}</td>
           </tr>
         </table>
         <div style="margin-top: 20px; padding: 15px; background-color: #f7fafc; border-left: 4px solid #4f46e5; border-radius: 4px;">
           <p style="margin: 0; font-weight: bold; color: #4a5568;">Message:</p>
-          <p style="margin: 10px 0 0 0; color: #2d3748; white-space: pre-wrap; font-style: italic;">"${message}"</p>
+          <p style="margin: 10px 0 0 0; color: #2d3748; white-space: pre-wrap; font-style: italic;">"${safeMessage}"</p>
         </div>
         <p style="margin-top: 25px; font-size: 11px; color: #718096; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 15px;">
           This message was sent automatically from your portfolio contact form.
@@ -153,6 +195,27 @@ async function getMongoClient() {
     }
   }
   return mongoClient;
+}
+
+async function saveContactSubmission(name: string, email: string, subject: string, message: string, timestamp: Date) {
+  try {
+    const dbClient = await getMongoClient();
+    if (dbClient && process.env.MONGODB_URI) {
+      const dbName = getDatabaseName(process.env.MONGODB_URI);
+      const db = dbClient.db(dbName);
+      const collection = db.collection("enquiries");
+      await collection.insertOne({
+        name,
+        email,
+        subject: subject || "No Subject",
+        message,
+        timestamp
+      });
+      console.log("Successfully saved contact submission to MongoDB.");
+    }
+  } catch (dbErr) {
+    console.error("Failed to save contact submission to MongoDB database:", dbErr);
+  }
 }
 
 // Lazily initialized Gemini Client
@@ -373,14 +436,18 @@ app.post("/api/assistant", async (req, res) => {
       return `${m.sender === "user" ? "User" : "Assistant"}: ${m.text}`;
     }).join("\n");
 
-    const response = await client.models.generateContent({
-      model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
-      contents: `Conversation context:\n${conversation}\n\nLatest User Message: ${latestMessage}`,
-      config: {
-        systemInstruction: systemPrompt,
-        temperature: 0.3,
-      }
-    });
+    const response = await withTimeout(
+      client.models.generateContent({
+        model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
+        contents: `Conversation context:\n${conversation}\n\nLatest User Message: ${latestMessage}`,
+        config: {
+          systemInstruction: systemPrompt,
+          temperature: 0.3,
+        }
+      }),
+      AI_RESPONSE_TIMEOUT_MS,
+      "Gemini assistant response"
+    );
 
     const replyText = response.text || "I'm here to help you learn more about Srushti's work! Ask me about her projects or technical experience.";
     res.json({ text: replyText });
@@ -402,34 +469,19 @@ app.post("/api/contact", async (req, res) => {
   // Log message internally
   console.log(`[Contact Submission] From: ${name} <${email}>, Subject: ${subject || "None"}, Msg: ${message}`);
 
-  try {
-    const dbClient = await getMongoClient();
-    if (dbClient && process.env.MONGODB_URI) {
-      const dbName = getDatabaseName(process.env.MONGODB_URI);
-      const db = dbClient.db(dbName);
-      const collection = db.collection("enquiries");
-      await collection.insertOne({
-        name,
-        email,
-        subject: subject || "No Subject",
-        message,
-        timestamp
-      });
-      console.log("Successfully saved contact submission to MongoDB.");
-    }
-  } catch (dbErr) {
-    console.error("Failed to save contact submission to MongoDB database:", dbErr);
-    // Continue and return success to the user so user experience isn't broken
-  }
-
-  // Trigger real-time email notification
-  try {
-    await sendEmailNotification(name, email, subject, message, timestamp);
-  } catch (emailErr) {
-    console.error("Failed to trigger email notification:", emailErr);
-  }
-
   res.json({ success: true, message: "Thank you for reaching out! Srushti will get back to you shortly." });
+
+  // Save and notify after responding so database and SMTP latency never slow down the form.
+  void Promise.allSettled([
+    saveContactSubmission(name, email, subject, message, timestamp),
+    sendEmailNotification(name, email, subject, message, timestamp)
+  ]).then((results) => {
+    results.forEach((result) => {
+      if (result.status === "rejected") {
+        console.error("Contact background task failed:", result.reason);
+      }
+    });
+  });
 });
 
 // Vite server integrations
