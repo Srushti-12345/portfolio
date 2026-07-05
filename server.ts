@@ -2,7 +2,7 @@ import express from "express";
 import path from "path";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
-import { MongoClient } from "mongodb";
+import { MongoClient, ObjectId } from "mongodb";
 import nodemailer from "nodemailer";
 
 
@@ -36,6 +36,32 @@ function escapeHtml(value: string) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+function maskEmail(value?: string) {
+  if (!value || !value.includes("@")) {
+    return value ? "***" : null;
+  }
+
+  const [name, domain] = value.split("@");
+  const visible = name.slice(0, 2);
+  return `${visible}${"*".repeat(Math.max(name.length - 2, 1))}@${domain}`;
+}
+
+function getNotificationDiagnostics() {
+  const smtpUser = process.env.SMTP_USER;
+  const smtpPass = process.env.SMTP_PASS;
+  const notificationEmail = process.env.NOTIFICATION_EMAIL || smtpUser;
+
+  return {
+    smtpHost: process.env.SMTP_HOST || null,
+    smtpPort: process.env.SMTP_PORT || "587",
+    smtpUserConfigured: Boolean(smtpUser),
+    smtpPassConfigured: Boolean(smtpPass),
+    notificationEmailConfigured: Boolean(notificationEmail),
+    smtpUser: maskEmail(smtpUser),
+    notificationEmail: maskEmail(notificationEmail),
+  };
 }
 
 function getDatabaseName(uri: string): string {
@@ -98,13 +124,23 @@ async function sendEmailNotification(name: string, email: string, subject: strin
   const transporter = getMailTransporter();
   if (!transporter) {
     console.log("Skipping email notification because SMTP is not configured in .env.");
-    return false;
+    return {
+      ok: false,
+      status: "skipped",
+      reason: "SMTP_USER or SMTP_PASS is not configured",
+      ...getNotificationDiagnostics(),
+    };
   }
 
   const notificationEmail = process.env.NOTIFICATION_EMAIL || process.env.SMTP_USER;
   if (!notificationEmail) {
     console.warn("WARNING: NOTIFICATION_EMAIL is not set, and unable to fallback to SMTP_USER.");
-    return false;
+    return {
+      ok: false,
+      status: "skipped",
+      reason: "Notification recipient is not configured",
+      ...getNotificationDiagnostics(),
+    };
   }
 
   const safeName = escapeHtml(name);
@@ -178,14 +214,31 @@ Contact the sender at: ${email}`,
 
     if (rejected) {
       console.warn(`Email notification had rejected recipients. Accepted: ${accepted || "none"}. Rejected: ${rejected}. Message ID: ${info.messageId}`);
-      return false;
+      return {
+        ok: false,
+        status: "failed",
+        messageId: info.messageId,
+        accepted,
+        rejected,
+        reason: "SMTP rejected one or more recipients",
+      };
     }
 
     console.log(`Email notification accepted by SMTP. Accepted: ${accepted || notificationEmail}. Message ID: ${info.messageId}`);
-    return true;
+    return {
+      ok: true,
+      status: "sent",
+      messageId: info.messageId,
+      accepted: accepted || notificationEmail,
+      rejected,
+    };
   } catch (err) {
     console.error("Failed to send email notification:", err);
-    return false;
+    return {
+      ok: false,
+      status: "failed",
+      reason: err instanceof Error ? err.message : "Unknown email notification error",
+    };
   }
 }
 
@@ -220,17 +273,53 @@ async function saveContactSubmission(name: string, email: string, subject: strin
       const dbName = getDatabaseName(process.env.MONGODB_URI);
       const db = dbClient.db(dbName);
       const collection = db.collection("enquiries");
-      await collection.insertOne({
+      const result = await collection.insertOne({
         name,
         email,
         subject: subject || "No Subject",
         message,
-        timestamp
+        timestamp,
+        emailNotification: {
+          status: "pending",
+          updatedAt: new Date(),
+        },
       });
       console.log("Successfully saved contact submission to MongoDB.");
+      return result.insertedId;
     }
   } catch (dbErr) {
     console.error("Failed to save contact submission to MongoDB database:", dbErr);
+  }
+
+  return null;
+}
+
+async function updateContactEmailNotification(contactId: ObjectId | null, emailNotification: Record<string, unknown>) {
+  if (!contactId) {
+    return;
+  }
+
+  try {
+    const dbClient = await getMongoClient();
+    if (dbClient && process.env.MONGODB_URI) {
+      const dbName = getDatabaseName(process.env.MONGODB_URI);
+      await dbClient
+        .db(dbName)
+        .collection("enquiries")
+        .updateOne(
+          { _id: contactId },
+          {
+            $set: {
+              emailNotification: {
+                ...emailNotification,
+                updatedAt: new Date(),
+              },
+            },
+          }
+        );
+    }
+  } catch (dbErr) {
+    console.error("Failed to update email notification status in MongoDB:", dbErr);
   }
 }
 
@@ -473,6 +562,13 @@ app.post("/api/assistant", async (req, res) => {
   }
 });
 
+app.get("/api/notification-health", (req, res) => {
+  res.json({
+    ok: true,
+    ...getNotificationDiagnostics(),
+  });
+});
+
 // Serve Contact Enquiry endpoint
 app.post("/api/contact", async (req, res) => {
   const { name, email, subject, message } = req.body;
@@ -488,17 +584,21 @@ app.post("/api/contact", async (req, res) => {
   res.json({ success: true, message: "Thank you for reaching out! Srushti will get back to you shortly." });
 
   // Save and notify after responding so database and SMTP latency never slow down the form.
-  void Promise.allSettled([
-    saveContactSubmission(name, email, subject, message, timestamp),
-    sendEmailNotification(name, email, subject, message, timestamp)
-  ]).then((results) => {
-    results.forEach((result) => {
-      if (result.status === "rejected") {
-        console.error("Contact background task failed:", result.reason);
-      } else if (result.value === false) {
-        console.warn("Contact background task completed but reported failure.");
-      }
-    });
+  void (async () => {
+    const contactSavePromise = saveContactSubmission(name, email, subject, message, timestamp);
+    const emailNotificationPromise = sendEmailNotification(name, email, subject, message, timestamp);
+    const [contactId, emailNotification] = await Promise.all([
+      contactSavePromise,
+      emailNotificationPromise,
+    ]);
+
+    if (!emailNotification.ok) {
+      console.warn("Email notification did not send:", emailNotification);
+    }
+
+    await updateContactEmailNotification(contactId, emailNotification);
+  })().catch((error) => {
+    console.error("Contact background task failed:", error);
   });
 });
 
