@@ -117,7 +117,13 @@ async function sendEmailNotification(name: string, email: string, subject: strin
     from: `"Portfolio Enquiry" <${process.env.SMTP_USER}>`,
     to: notificationEmail,
     replyTo: email,
-    subject: `New Portfolio Enquiry: ${subject || "No Subject"}`,
+    subject: `[Portfolio Contact] ${subject || "New enquiry"} - ${name}`,
+    priority: "high" as const,
+    headers: {
+      "X-Priority": "1",
+      "X-MSMail-Priority": "High",
+      Importance: "high",
+    },
     text: `You have received a new message from your portfolio contact form:
     
 Name: ${name}
@@ -165,7 +171,15 @@ Reply directly to this email to contact the sender.`,
 
   try {
     const info = await transporter.sendMail(mailOptions);
-    console.log("Email notification sent successfully:", info.messageId);
+    const accepted = Array.isArray(info.accepted) ? info.accepted.join(", ") : "";
+    const rejected = Array.isArray(info.rejected) ? info.rejected.join(", ") : "";
+
+    if (rejected) {
+      console.warn(`Email notification had rejected recipients. Accepted: ${accepted || "none"}. Rejected: ${rejected}. Message ID: ${info.messageId}`);
+      return false;
+    }
+
+    console.log(`Email notification accepted by SMTP. Accepted: ${accepted || notificationEmail}. Message ID: ${info.messageId}`);
     return true;
   } catch (err) {
     console.error("Failed to send email notification:", err);
@@ -479,6 +493,8 @@ app.post("/api/contact", async (req, res) => {
     results.forEach((result) => {
       if (result.status === "rejected") {
         console.error("Contact background task failed:", result.reason);
+      } else if (result.value === false) {
+        console.warn("Contact background task completed but reported failure.");
       }
     });
   });
